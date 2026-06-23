@@ -5,7 +5,7 @@ use ieee.numeric_std.all;
 entity rom_64x8 is
   port (
     addr : in  std_logic_vector(5 downto 0); -- 6-bit read address (0 to 63)
-    data : out std_logic_vector(7 downto 0); -- 8-bit sample output (combinational)
+    data : out std_logic_vector(7 downto 0) -- 8-bit sample output (combinational)
   );
 end entity rom_64x8;
 

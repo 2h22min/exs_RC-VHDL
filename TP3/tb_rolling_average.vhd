@@ -12,6 +12,7 @@ architecture sim of tb_rolling_average is
     signal clk, rst, start, busy, done, ram_we, sr_enable, window_full : std_logic := '0';
     signal rom_addr, ram_addr : std_logic_vector(5 downto 0) := (others => '0');
     signal rom_data, ram_din, new_sample, old_sample : std_logic_vector(7 downto 0);
+    signal average : unsigned(7 downto 0);
 begin
     clk <= not clk after CLK_PERIOD / 2;
 
@@ -47,38 +48,45 @@ begin
         wait until rising_edge(clk); start <= '0';
         sr_enable <= '1';
 
+        wait until rising_edge(done); sr_enable <= '0';
         -- The testbench stops the simulation after done is observed
         wait until falling_edge(done);
         wait until falling_edge(clk);
         assert false report "Simulation finished successfully" severity failure;
     end process;
 
-    process (rom_addr)
+    process (rom_addr, ram_addr)
         variable n_streamed : integer range 0 to 64 := 0;
-        variable sum, average : unsigned(10 downto 0) := (others => '0');
+        variable sum        : unsigned(10 downto 0) := (others => '0');
     begin
         if sr_enable = '1' then
             assert busy = '1' report "busy was not high while processing sample " & integer'image(n_streamed) severity error;
             n_streamed := n_streamed + 1;
+            -- Compute the expected rolling average
             sum := sum + resize(unsigned(new_sample), 11) - resize(unsigned(old_sample), 11);
+            average <= resize(sum srl 3, 8);
+            
+            assert ram_we = window_full
+                report "ram_we was not only high after the window became full"
+                severity error;
             if window_full = '1' then
                 -- The system introduces a warm-up latency of 7 samples before the first output is written
-                assert ram_we = '1'
-                    report "ram_we was not high after the window became full"
-                    severity error;
                 assert n_streamed >= 8
                     report "window full before streaming 8 samples"
                     severity error;
                 -- ram_addr increments correctly from 0 to 56
                 assert to_integer(unsigned(ram_addr)) + 8 = n_streamed;
-
-                -- Compute the expected rolling average
-                average := sum srl 3;
-                -- Verify written average matches expected
-                assert (unsigned(ram_din) = resize(average, 8))
-                    report "ram_din did not match expected average " & integer'image(to_integer(average))
-                    severity error;
             end if;
+        end if;
+    end process;
+
+    process (clk)
+    begin
+        if (window_full = '1') and falling_edge(clk) then
+            -- Verify written average matches expected
+            assert (unsigned(ram_din) = average)
+                report "ram_din did not match expected average " & integer'image(to_integer(average))
+                severity error;
         end if;
     end process;
 end architecture;

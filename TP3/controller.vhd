@@ -70,16 +70,16 @@ begin
                         -- Update running sum
                         sum_next := sum + resize(unsigned(new_sample), 11) - resize(unsigned(old_sample), 11);
                         sum <= sum_next;
-                        if unsigned(ram_addr) = RAM_DEPTH-1 then -- last write
+                        if unsigned(ram_addr) = RAM_DEPTH-2 then -- last write
                             state <= Sdone;
                             done <= '1';
                         else
                             -- Controller advances the ROM address
                             rom_addr <= std_logic_vector(unsigned(rom_addr) + 1);
-                            -- and the RAM address when writing
-                            if window_full = '1' then
-                                ram_addr <= std_logic_vector(unsigned(ram_addr) + 1);
-                            end if;
+                        end if;
+                        -- Advance the RAM address when writing
+                        if window_full = '1' then
+                            ram_addr <= std_logic_vector(unsigned(ram_addr) + 1);
                         end if;
 
                     when Sdone => -- finished processing

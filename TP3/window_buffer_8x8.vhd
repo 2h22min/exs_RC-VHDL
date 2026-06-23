@@ -22,19 +22,16 @@ architecture slicing of window_buffer_8x8 is
     signal n_stored : integer range 0 to 8;
 begin
     full <= '1' when n_stored = 8 else '0';
+    sr_out <= sr(sr'high);
 
     process(clk)
     begin
         if rising_edge(clk) then
             if enable = '1' then
                 sr <= sr(sr'high - 1 downto sr'low) & sr_in;
-                sr_out <= sr(sr'high);
-
                 if n_stored < 8 then
                     n_stored <= n_stored + 1;
                 end if;
-            else
-                sr_out <= (others => '0');
             end if;
         end if;
     end process;

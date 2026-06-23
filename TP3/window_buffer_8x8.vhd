@@ -33,6 +33,8 @@ begin
                 if n_stored < 8 then
                     n_stored <= n_stored + 1;
                 end if;
+            else
+                sr_out <= (others => '0');
             end if;
         end if;
     end process;

@@ -13,7 +13,7 @@ entity uart_8 is
         rx_line     : in std_logic; -- Serial line input (idle-high)
         rx_data     : out std_logic_vector(7 downto 0); -- Received 8-bit payload
         rx_valid    : out std_logic; -- Pulses high when a frame is accepted
-        crc_error   : out std_logic; -- High for one cycle on CRC or stop-bit error
+        crc_error   : out std_logic -- High for one cycle on CRC or stop-bit error
     );
 end entity;
 
@@ -22,10 +22,10 @@ architecture rtl of uart_8 is
     type state_t is (IDLE, START, DATA, CRC, STOP);
     signal tx_state, rx_state : state_t := IDLE;
     signal tx_shift : std_logic_vector(7 downto 0); -- holds tx_data captured
+    signal rx_shift : std_logic_vector(7 downto 0); -- samples read bits
     signal tx_crc   : std_logic; -- XOR reduction of the payload computed at the start of transmission
     signal rx_crc   : std_logic; -- recomputed while sampling the data bits to compare
-    signal tx_data_bit : integer range 0 to 7;
-    signal rx_data_bit : integer range 0 to 7;
+    signal tx_data_bit, rx_data_bit : integer range 0 to 7;
     
     function xor_reduce(v : std_logic_vector) return std_logic is
         variable r : std_logic := '0';
@@ -41,15 +41,14 @@ begin
                     '0'                 when START, -- start bit
                     tx_shift(tx_data_bit)  when DATA, -- emits LSB first
                     tx_crc              when CRC, -- crc bit
-                    '1'                 when STOP, -- stop bit
-                    '1'                 when others;
+                    '1'                 when STOP; -- stop bit
     tx_busy <= '0' when tx_state = IDLE else '1'; -- remains asserted during transmission sequence
 
     transmitter: process (clk)
     begin
         if rising_edge(clk) then
             if rst = '1' then
-                -- TODO
+                tx_state <= IDLE;
             else
                 case tx_state is
                     when IDLE =>
@@ -62,14 +61,11 @@ begin
                         tx_shift <= tx_data;
                         tx_crc <= xor_reduce(tx_data);
 
-                        -- tx_line <= '0'; -- emit start bit
                         tx_state <= DATA;
-                        -- tx_busy <= '1';
                         tx_data_bit <= 0;
 
                     when DATA =>
                         -- Advance one state per clock through the 8 data bits
-                        -- tx_line <= tx_shift(tx_data_bit); -- emits LSB first
                         if tx_data_bit = 7 then
                             tx_data_bit <= 0;
                             tx_state <= CRC;
@@ -78,13 +74,10 @@ begin
                         end if;
 
                     when CRC =>
-                        -- tx_line <= tx_crc; -- emit crc bit
                         tx_state <= STOP;
                         
                     when STOP =>
-                        -- tx_line <= '1'; -- emit stop bit
                         tx_state <= IDLE;
-                        -- tx_busy <= '0';
                         
                 end case;
             end if;
@@ -92,10 +85,13 @@ begin
     end process;
     
     receiver: process (clk)
+        variable rx_line_crc  : std_logic; -- samples the CRC bit received
     begin
         if rising_edge(clk) then
             if rst = '1' then
-                -- TODO
+                rx_valid <= '0';
+                crc_error <= '0';
+                rx_state <= IDLE;
             else
                 case rx_state is
                     when IDLE =>
@@ -103,26 +99,36 @@ begin
                             rx_state <= DATA;
                             rx_crc <= '0';
                         end if;
+                        rx_valid <= '0';
+                        crc_error <= '0';
                         
                     when DATA =>
-                        -- accumulate the XOR of the data bits
+                        -- Accumulate the XOR of the data bits
                         rx_crc <= rx_crc xor rx_line;
-                        -- sample one bit per clock
+                        -- Sample one bit per clock
+                        rx_shift <= rx_line & rx_shift(rx_shift'high downto rx_shift'low + 1);
                         if rx_data_bit = 7 then
                             rx_data_bit <= 0;
-                            tx_state <= CRC;
+                            rx_state <= CRC;
                         else
                             rx_data_bit <= rx_data_bit + 1;
                         end if;
 
                     when CRC =>
-                        -- TODO: sample crc bit
+                        rx_line_crc <= rx_line; -- sample crc bit
                         rx_state <= STOP;
                         
                     when STOP =>
-                        -- TODO: If the stop bit is high and the computed CRC
-                        -- matches, rx valid pulses with the received byte;
-                        -- otherwise crc error pulses to flag the frame.
+                        -- If the stop bit is high and the computed CRC matches,
+                        if (rx_line = '1') and (rx_crc = rx_line_crc) then
+                            rx_valid <= '1'; -- pulses with the received byte
+                        else -- otherwise crc_error pulses to flag the frame
+                            crc_error <= '1';
+                        end if;
+                        rx_data <= rx_shift;
+                        rx_state <= IDLE;
+                        
+                    when others =>
                         rx_state <= IDLE;
                         
                 end case;

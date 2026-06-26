@@ -119,11 +119,12 @@ begin
                         rx_state <= STOP;
                         
                     when STOP =>
-                        -- If the stop bit is high and the computed CRC matches,
-                        if (rx_line = '1') and (rx_crc = rx_line_crc) then
-                            rx_valid <= '1'; -- pulses with the received byte
-                        else -- otherwise crc_error pulses to flag the frame
-                            crc_error <= '1';
+                        -- If the stop bit is high
+                        if rx_line = '1' then
+                            rx_valid <= '1'; -- frame accepted
+                        end if;
+                        if rx_crc /= rx_line_crc then -- computed CRC not match
+                            crc_error <= '1'; -- pulse to flag the frame
                         end if;
                         rx_data <= rx_shift;
                         rx_state <= IDLE;

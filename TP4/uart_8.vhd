@@ -115,7 +115,7 @@ begin
                         end if;
 
                     when CRC =>
-                        rx_line_crc <= rx_line; -- sample crc bit
+                        rx_line_crc := rx_line; -- sample crc bit
                         rx_state <= STOP;
                         
                     when STOP =>

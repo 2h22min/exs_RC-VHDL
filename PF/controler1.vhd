@@ -16,15 +16,14 @@ entity controler1 is
 end entity controler1;
 --  controler1 reads ROM, encrypts each byte, and sends via UART_8
 architecture rtl of controler1 is
-    type state_t is (IDLE, S_START, NXT_BYTE, ENC, CRC, STOP, S_DONE);
+    type state_t is (IDLE, S_START, ENC, CRC, STOP, S_DONE);
     signal state            : state_t;
 
-    signal enc_enable, enc_din, enc_out : std_logic := '0';
-    signal byte_shift : std_logic_vector(7 downto 0); -- hold byte(s)
-    signal enc_cyc  : integer range 0 to 7;
+    signal enc_enable, enc_din, enc_out : std_logic;
+    signal byte_shift, enc_byte : std_logic_vector(7 downto 0); -- hold byte(s)
+    signal enc_cyc  : integer range 0 to 8;
     
     signal tx_start, rx_line, rx_valid : std_logic;
-    signal enc_byte : std_logic_vector(7 downto 0);
 begin
     encrypter: entity work.stream_cipher
     port map(
@@ -38,7 +37,6 @@ begin
     port map (
         clk => clk, rst => rst, tx_start => tx_start,
         rx_data => enc_byte, tx_data => enc_byte, -- R/T encrypted byte
-        -- tx_busy => tx_busy,
         tx_line => tx_line, rx_line => rx_line, rx_valid => rx_valid
     );
 
@@ -50,31 +48,34 @@ begin
             if rst = '1' then
                 rom_addr <= (others => '0');
                 state <= IDLE;
+                enc_enable <= '0';
                 busy <= '0';
                 done <= '0';
             else
                 case state is
                     when IDLE =>
                         if start = '1' then
-                            state <= NXT_BYTE;
+                            state <= S_START;
                             busy <= '1';
                         end if;
-
-                    when NXT_BYTE =>
+                        
+                    when S_START => -- sync with TX start of previous byte
                         state <= ENC;
                         byte_shift <= rom_data; -- capture rom data byte
                         enc_enable <= '1'; -- start encryption of byte
-                        rx_line <= '0'; -- start UART receival of encrypted (1-cycle offset)
 
                     when ENC =>
-                        rx_line <= enc_out; -- UART receives encrypted byte
-                        if enc_cyc = 7 then
+                        -- start UART receival of encrypted (1-cycle offset)
+                        rx_line <= '0' when enc_cyc = 0 else enc_out;
+                        if enc_cyc = 7 then -- disables cipher after 8 cycles
                             enc_enable <= '0';
-                            enc_cyc <= 0;
-                            state <= CRC;
-                        else
+                        end if;
+                        if enc_cyc < 8 then
                             byte_shift <= byte_shift srl 1;
                             enc_cyc <= enc_cyc + 1;
+                        else -- flush cycle to capture final bit
+                            enc_cyc <= 0;
+                            state <= CRC;
                         end if;
 
                     when CRC => -- wait crc bit
@@ -94,9 +95,6 @@ begin
                         -- 1 cycle before this encrypted byte is looped back
                         -- into TX, so it's sampled as soon as available
                         -- after the low start bit is emitted
-                        
-                    when S_START => -- sync with TX start of previous byte
-                        state <= NXT_BYTE;
 
                     when S_DONE => -- finished processing
                         tx_start <= '0';

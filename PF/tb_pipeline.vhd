@@ -8,11 +8,10 @@ end entity;
 architecture sim of tb_pipeline is
     constant CLK_PERIOD : time := 10 ns;
 
-    signal clk, rst, start, busy, done, ram_we, sr_enable, window_full : std_logic := '0';
-    signal rom_addr, ram_addr : std_logic_vector(5 downto 0) := (others => '0');
-    signal rom_data, ram_din, new_sample, old_sample : std_logic_vector(7 downto 0);
-    signal average : unsigned(7 downto 0);
-    signal rst, tx_busy, tx_line, rx_line, rx_valid, crc_error : std_logic;
+    signal clk, rst, start : std_logic := '0';
+    signal rom_addr, ram_addr : std_logic_vector(5 downto 0);
+    signal rom_data, ram_din : std_logic_vector(7 downto 0);
+    signal ctrl1_busy, ctrl1_done, ctrl2_busy, ctrl2_done, line, ram_we, crc_error : std_logic;
 begin
     clk <= not clk after CLK_PERIOD / 2;
 
@@ -22,9 +21,16 @@ begin
     controler1: entity work.controler1
     port map (
         clk => clk, rst => rst,
-        start => start, busy => busy, done => done,
+        start => start, busy => ctrl1_busy, done => ctrl1_done,
         rom_data => rom_data, rom_addr => rom_addr,
-        tx_line => tx_line
+        tx_line => line
+    );
+    controler2: entity work.controler2
+    port map (
+        clk => clk, rst => rst, rx_line => line,
+        busy => ctrl2_busy, done => ctrl2_done,
+        ram_we => ram_we, ram_addr => ram_addr, ram_din => ram_din,
+        crc_error_seen => crc_error
     );
 
     stim: process
@@ -34,9 +40,8 @@ begin
         wait until rising_edge(clk); start <= '1';
         wait until rising_edge(clk); start <= '0';
 
-        wait until rising_edge(done);
         -- The testbench stops the simulation after done is observed
-        wait until falling_edge(done);
+        wait until falling_edge(ctrl2_done);
         wait until falling_edge(clk);
         assert false report "Simulation finished successfully" severity failure;
     end process;

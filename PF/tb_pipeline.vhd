@@ -9,9 +9,9 @@ architecture sim of tb_pipeline is
     constant CLK_PERIOD : time := 10 ns;
 
     signal clk, rst, start : std_logic := '0';
+    signal ctrl1_busy, ctrl1_done, ctrl2_busy, ctrl2_done, line, ram_we, crc_error : std_logic;
     signal rom_addr, ram_addr : std_logic_vector(5 downto 0);
     signal rom_data, ram_din : std_logic_vector(7 downto 0);
-    signal ctrl1_busy, ctrl1_done, ctrl2_busy, ctrl2_done, line, ram_we, crc_error : std_logic;
 begin
     clk <= not clk after CLK_PERIOD / 2;
 
